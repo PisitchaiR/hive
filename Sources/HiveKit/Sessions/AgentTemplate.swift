@@ -1,0 +1,469 @@
+import AppKit
+import Foundation
+import SwiftUI
+
+/// A named profile that turns into a `TerminalSessionConfig` when the user
+/// picks it from the "+" menu. The shell starts under our wrapper `.zshrc`
+/// (HiveShellIntegration), which sources the user's config, then — if
+/// `HIVE_AGENT` is set — invokes the agent inline. The user never sees the
+/// shell prompt or the command echo, and on agent exit they land in a clean
+/// shell prompt with their full PATH/aliases intact.
+struct AgentTemplate: Identifiable, Hashable {
+    let id: String
+    let title: String
+    /// SF Symbol used when `iconAsset` is nil or fails to load.
+    let symbol: String
+    /// Filename (without extension) of a bundled PNG in `Resources/Icons/`.
+    /// Sourced from github.com/lobehub/lobe-icons (MIT).
+    let iconAsset: String?
+    /// Brand-derived hue used for compact indicators (sidebar status pips).
+    /// Picked from each lobe-icon's dominant fill so a row's pip group reads as
+    /// the same family of marks shown elsewhere. sRGB hex.
+    let tintHex: String?
+    let initialCommand: String?
+    /// For custom templates only — snapshot of `CustomAgentData.baseAgentId`
+    /// taken at `fromCustom` time. Nil for builtins. Lives on the template
+    /// (not on Session) because the wrapper-end revert in `applyHookEvent`
+    /// must use the value present when the session *started*, not whatever
+    /// the user has since changed in Settings → Agents (a mid-run
+    /// edit/delete would otherwise leave the tab stuck in the custom-agent
+    /// state forever).
+    let baseAgentId: String?
+    /// CLI flag the agent's binary expects when receiving a prompt argument.
+    /// Nil = positional (`claude "<prompt>"`, the most common shape). Agents
+    /// that need a flag set it on their builtin definition below — see the
+    /// Copilot / Amp wirings. Drives the right-click "Ask <agent>" launch
+    /// path via `makeSessionConfig(initialPrompt:)`. Templates with
+    /// `initialCommand == nil` (Terminal) ignore this entirely.
+    let promptLaunchFlag: String?
+    /// CLI flag the agent's binary expects to resume a prior conversation.
+    /// Nil = no resume support (hive doesn't have an id-capture path for
+    /// this agent yet). Claude Code = `--resume`; Grok = `--session`. Drives
+    /// `makeSessionConfig(resumeId:)` and `supportsResume`.
+    let resumeFlag: String?
+    /// Environment the agent launches with — populated only for custom
+    /// agents (`parseEnv(CustomAgentData.env)` in `fromCustom`); builtins
+    /// are `[:]`. Snapshot-frozen at `fromCustom` like `baseAgentId`. v1
+    /// consumes it for Claude-Code-based customs — `spawnSession` writes
+    /// it into a per-agent Claude settings file.
+    let extraEnv: [String: String]
+
+    init(
+        id: String,
+        title: String,
+        symbol: String,
+        iconAsset: String?,
+        tintHex: String?,
+        initialCommand: String?,
+        baseAgentId: String? = nil,
+        promptLaunchFlag: String? = nil,
+        resumeFlag: String? = nil,
+        extraEnv: [String: String] = [:]
+    ) {
+        self.id = id
+        self.title = title
+        self.symbol = symbol
+        self.iconAsset = iconAsset
+        self.tintHex = tintHex
+        self.initialCommand = initialCommand
+        self.baseAgentId = baseAgentId
+        self.promptLaunchFlag = promptLaunchFlag
+        self.resumeFlag = resumeFlag
+        self.extraEnv = extraEnv
+    }
+
+    var tint: Color? {
+        tintHex.flatMap(Color.init(hex:))
+    }
+
+    /// `extraOptions` is appended after `initialCommand` (space-separated)
+    /// when forming `HIVE_AGENT`. The wrapper rc's `eval` splits on
+    /// whitespace, so the caller handles its own quoting for tokens that
+    /// contain spaces.
+    ///
+    /// `resumeId`, when present and the template declares a `resumeFlag`,
+    /// prepends `<resumeFlag> <id>` to the launch command so the new tab
+    /// continues an existing conversation. Other agents leave `resumeFlag`
+    /// nil — their CLIs accept resume flags syntactically, but the
+    /// id-capture path (a hook payload carrying the session id) is not
+    /// implemented for them yet.
+    ///
+    /// `initialPrompt`, when non-empty, drives the right-click "Ask <agent>"
+    /// path: the prompt is POSIX-quoted and inserted into `HIVE_AGENT` as
+    /// the first argv after the binary name (or after `promptLaunchFlag`
+    /// when that's set — Copilot's `-p`, Amp's `-x`). Mutually exclusive
+    /// with `resumeId` — asking a fresh question shouldn't graft onto a
+    /// stale conversation, so `initialPrompt` wins and `resumeId` is
+    /// silently dropped when both are supplied.
+    func makeSessionConfig(
+        extraOptions: String? = nil,
+        resumeId: String? = nil,
+        initialPrompt: String? = nil
+    ) -> TerminalSessionConfig {
+        // Pick a shell that has a hive integration wrapper. Plain terminal
+        // sessions respect $SHELL where we have a wrapper (zsh/bash); other
+        // shells (fish/nu/...) get $SHELL too, just without cwd tracking.
+        // Agent sessions force a wrapped shell so HIVE_AGENT auto-launch
+        // works — `.other` users get zsh as a working fallback.
+        var config: TerminalSessionConfig
+        switch (HiveShellIntegration.detectedUserShell, initialCommand) {
+        case (.bash, _):
+            config = .bashShell(launcher: HiveShellIntegration.bashLauncherPath)
+        case (.zsh, _):
+            config = .zshShell()
+        case (.other, .none):
+            config = .defaultShell()
+        case (.other, .some):
+            config = .zshShell()
+        }
+        if let initialCommand {
+            let trimmedExtras = extraOptions?.trimmingCharacters(in: .whitespaces) ?? ""
+            let trimmedPrompt = initialPrompt?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            // Resume flag goes between binary name and options
+            // (`claude --resume <id> --model opus`) — each CLI takes it as
+            // a positional argument to its top-level command; appending
+            // after extras would still work but reads worse in `ps`.
+            // Suppressed when `initialPrompt` is present — "Ask <agent>"
+            // is a fresh question, not a continuation.
+            var resumeFragment = ""
+            if trimmedPrompt.isEmpty, let flag = resumeFlag, let id = resumeId, !id.isEmpty {
+                resumeFragment = " \(flag) \(id)"
+            }
+            var promptFragment = ""
+            if !trimmedPrompt.isEmpty {
+                let quoted = HiveShellIntegration.quote(trimmedPrompt)
+                if let flag = promptLaunchFlag {
+                    promptFragment = " \(flag) \(quoted)"
+                } else {
+                    // POSIX `--` separator stops the CLI's argparse from
+                    // treating a prompt that starts with `-` as a flag.
+                    // Right-clicking `ls -la` output and asking Codex /
+                    // Claude would otherwise hit "unexpected argument
+                    // '-rw-r--r--@...'" on the first dashed line.
+                    promptFragment = " -- \(quoted)"
+                }
+            }
+            let extrasFragment = trimmedExtras.isEmpty ? "" : " \(trimmedExtras)"
+            config.environment["HIVE_AGENT"] = "\(initialCommand)\(resumeFragment)\(promptFragment)\(extrasFragment)"
+        }
+        return config
+    }
+
+    var supportsResume: Bool {
+        resumeFlag != nil
+    }
+
+    /// Parses a `.env`-style block — one `KEY=VALUE` per line — into a
+    /// dictionary. Blank lines and `#` comment lines are skipped, a leading
+    /// `export` keyword is dropped (so a block pasted from `.zshrc` works),
+    /// and the split is on the *first* `=` so values may contain `=`. A value
+    /// wrapped in one matching pair of quotes is unwrapped. Keys that aren't
+    /// valid shell identifiers are dropped, as are `HIVE_`-prefixed keys —
+    /// letting a custom agent set `HIVE_SURFACE_ID` would misroute hook pings.
+    static func parseEnv(_ raw: String) -> [String: String] {
+        var result: [String: String] = [:]
+        // `\.isNewline` splits LF / CR / CRLF alike — `split(separator: "\n")`
+        // misses the `\n` inside the `\r\n` grapheme cluster and would
+        // collapse a CRLF block (Windows editor, web copy) into one bad value.
+        for line in raw.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline) {
+            var trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty || trimmed.hasPrefix("#") { continue }
+            if trimmed.hasPrefix("export"),
+               let separator = trimmed.dropFirst("export".count).first, separator.isWhitespace {
+                trimmed = String(trimmed.dropFirst("export".count)).trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            guard let eq = trimmed.firstIndex(of: "=") else { continue }
+            let key = trimmed[..<eq].trimmingCharacters(in: .whitespacesAndNewlines)
+            guard isValidEnvKey(key) else { continue }
+            var value = trimmed[trimmed.index(after: eq)...].trimmingCharacters(in: .whitespacesAndNewlines)
+            if value.count >= 2, let first = value.first, value.last == first,
+               first == "\"" || first == "'" {
+                value = String(value.dropFirst().dropLast())
+            }
+            result[key] = value
+        }
+        return result
+    }
+
+    /// `^[A-Za-z_][A-Za-z0-9_]*$`, and not hive-internal (`HIVE_` prefix).
+    private static func isValidEnvKey(_ key: String) -> Bool {
+        guard let first = key.first, !key.hasPrefix("HIVE_") else { return false }
+        guard first == "_" || (first.isASCII && first.isLetter) else { return false }
+        return key.allSatisfy { $0 == "_" || ($0.isASCII && ($0.isLetter || $0.isNumber)) }
+    }
+}
+
+extension AgentTemplate {
+    /// The builtin Claude Code agent id. Call sites that gate Claude-
+    /// specific behaviour (the custom-agent env block) compare against this
+    /// rather than a bare `"claude-code"` literal.
+    static let claudeCodeID = "claude-code"
+
+    static let terminal = AgentTemplate(
+        id: "terminal",
+        title: "Terminal",
+        symbol: "terminal",
+        iconAsset: nil,
+        tintHex: nil,
+        initialCommand: nil
+    )
+
+    static let claudeCode = AgentTemplate(
+        id: claudeCodeID,
+        title: "Claude Code",
+        symbol: "sparkle",
+        iconAsset: "claudecode",
+        tintHex: "D97757",
+        initialCommand: "claude",
+        resumeFlag: "--resume"
+    )
+
+    static let codex = AgentTemplate(
+        id: "codex",
+        title: "Codex",
+        symbol: "chevron.left.forwardslash.chevron.right",
+        iconAsset: "codex",
+        tintHex: "7A9DFF",
+        initialCommand: "codex"
+    )
+
+    static let gemini = AgentTemplate(
+        id: "gemini",
+        title: "Gemini CLI",
+        symbol: "diamond",
+        iconAsset: "gemini",
+        tintHex: "3186FF",
+        initialCommand: "gemini"
+    )
+
+    static let opencode = AgentTemplate(
+        id: "opencode",
+        title: "OpenCode",
+        symbol: "curlybraces",
+        iconAsset: "opencode",
+        tintHex: "B0B0B0",
+        initialCommand: "opencode"
+    )
+
+    static let amp = AgentTemplate(
+        id: "amp",
+        title: "Amp",
+        symbol: "bolt.fill",
+        iconAsset: "amp",
+        tintHex: "E8B168",
+        initialCommand: "amp",
+        promptLaunchFlag: "-x"
+    )
+
+    static let cursor = AgentTemplate(
+        id: "cursor",
+        title: "Cursor CLI",
+        symbol: "cube",
+        iconAsset: "cursor",
+        tintHex: "F54E00",
+        initialCommand: "cursor-agent"
+    )
+
+    static let copilot = AgentTemplate(
+        id: "copilot",
+        title: "Copilot CLI",
+        symbol: "hexagon.fill",
+        iconAsset: "githubcopilot",
+        tintHex: "6E40C9",
+        initialCommand: "copilot",
+        promptLaunchFlag: "-p"
+    )
+
+    static let grok = AgentTemplate(
+        id: "grok",
+        title: "Grok Build",
+        symbol: "x.square.fill",
+        iconAsset: "grok",
+        tintHex: "E8E8E8",
+        initialCommand: "grok"
+    )
+
+    /// Antigravity CLI — Google's Go-based successor to Gemini CLI; binary
+    /// `agy`. The `.gemini` template stays in `builtin` alongside this one
+    /// until 2026-06-18 when free/Pro access to Gemini CLI sunsets;
+    /// Enterprise (Code Assist Standard/Enterprise) retains the old CLI.
+    ///
+    /// Naming-conflict footgun: Antigravity 2.0 IDE installs a VS-Code-
+    /// style launcher *also* called `agy` at
+    /// `~/.antigravity/antigravity/bin/agy`. With only the IDE installed,
+    /// `agy` opens the GUI. The CLI installer puts its `agy` in
+    /// `~/.local/bin/` (earlier on PATH), so installing the CLI resolves
+    /// the conflict.
+    ///
+    /// `-i` (`--prompt-interactive`) is the right flag for Ask <agent>:
+    /// runs the initial prompt and keeps the session alive. `-p`
+    /// (`--print`) would single-shot exit.
+    ///
+    /// Resume / mid-run attention dot deferred: Antigravity has hooks
+    /// (SessionStart / UserPromptSubmit / Stop per third-party docs) and
+    /// `--conversation <id>`, but the JSON schema, settings-file location,
+    /// and a system-inject env var (no `ANTIGRAVITY_CLI_SYSTEM_SETTINGS_PATH`
+    /// analogue of Gemini's) are all undocumented. Revisit when
+    /// antigravity.google/docs/hooks publishes the schema.
+    static let antigravity = AgentTemplate(
+        id: "antigravity",
+        title: "Antigravity CLI",
+        symbol: "arrow.up.circle.fill",
+        iconAsset: "antigravity",
+        tintHex: "4285F4",
+        initialCommand: "agy",
+        promptLaunchFlag: "-i"
+    )
+
+    /// The 10 templates shipped with hive. User-defined custom agents are
+    /// merged on top via `all` at runtime.
+    static let builtin: [AgentTemplate] = [.terminal, .claudeCode, .codex, .gemini, .opencode, .amp, .cursor, .copilot, .grok, .antigravity]
+
+    /// All templates available right now — `builtin` plus the user's custom
+    /// agents from Settings → Agents. MainActor-isolated because it
+    /// reads `HiveSettingsModel.shared` to materialise custom entries.
+    @MainActor
+    static var all: [AgentTemplate] {
+        builtin + HiveSettingsModel.shared.customAgents.map(AgentTemplate.fromCustom)
+    }
+
+    /// Looks up a template by the slug an agent's hook system reports — the
+    /// same string as the template's `initialCommand` (the binary name the
+    /// user types). Returns nil for unknown slugs. MainActor because it
+    /// pulls the live `all` (built-in + custom).
+    @MainActor
+    static func from(hookSlug: String) -> AgentTemplate? {
+        all.first { $0.initialCommand == hookSlug }
+    }
+
+    /// All non-terminal templates resolved against the user's saved order.
+    /// Templates absent from `model.agentOrder` (typically: a fresh hive
+    /// install, or an agent shipped in a newer version) are appended in
+    /// their `AgentTemplate.all` position so nothing silently disappears.
+    @MainActor
+    static func ordered(model: HiveSettingsModel) -> [AgentTemplate] {
+        let nonTerminal = all.filter { $0.id != "terminal" }
+        // Use `uniquingKeysWith` so a hand-edited settings.json that puts a
+        // custom agent on a builtin id (or two customs on the same id) lands
+        // on the first occurrence instead of crashing the launcher. Builtin
+        // entries are appended first in `all`, so they win the tie.
+        let byId = Dictionary(nonTerminal.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let userOrderIds = model.agentOrder.filter { byId.keys.contains($0) }
+        let userOrderSet = Set(userOrderIds)
+        let missing = nonTerminal.filter { !userOrderSet.contains($0.id) }
+        return userOrderIds.compactMap { byId[$0] } + missing
+    }
+
+    /// What the `+` menu renders: Terminal pinned first (not user-controlled),
+    /// then `ordered(model:)` filtered to visible agents whose `initialCommand`
+    /// is set. The `initialCommand != nil` gate skips half-configured custom
+    /// agents (just-added or command-cleared) so the launch surface never
+    /// offers a row that would spawn a plain Terminal but get recorded as
+    /// that custom agent. They still appear in Settings → Agents so
+    /// the user can finish editing them.
+    @MainActor
+    static func visibleOrdered(model: HiveSettingsModel) -> [AgentTemplate] {
+        [.terminal] + ordered(model: model).filter {
+            !model.hiddenAgents.contains($0.id) && $0.initialCommand != nil
+        }
+    }
+
+    /// Resolves the user's chosen default template for `+` / `⌘T`. Returns
+    /// `nil` (meaning "no default, show the picker") when the saved id is
+    /// missing, unknown, or points to an agent the user has since hidden.
+    /// Looking the id up in `visibleOrdered` gives the stale-default-after-
+    /// hide fallback for free; Terminal is always present there so it stays
+    /// selectable even though it's not customisable from the Settings list.
+    @MainActor
+    static func defaultLaunchTemplate(model: HiveSettingsModel) -> AgentTemplate? {
+        guard let id = model.defaultAgentId else { return nil }
+        return visibleOrdered(model: model).first { $0.id == id }
+    }
+
+    /// Materialises a user-defined custom agent into a runtime `AgentTemplate`.
+    /// When `baseAgentId` matches a builtin, the custom inherits that
+    /// builtin's `iconAsset` / `symbol` / `tintHex` *and* its `initialCommand`
+    /// when the user's own `command` is blank — so picking "Claude Code" as
+    /// the base and leaving `command` empty launches the base's binary
+    /// (`claude`) with the custom's options appended (`--model opus`). A
+    /// `(none)` base with empty command stays nil so the `+` menu filter
+    /// skips half-configured customs.
+    static func fromCustom(_ data: CustomAgentData) -> AgentTemplate {
+        let base = builtin.first { $0.id == data.baseAgentId }
+        // `promptLaunchFlag` + `resumeFlag` follow the base unconditionally —
+        // they're properties of the binary (Copilot needs `-p`, Amp needs
+        // `-x`; Claude needs `--resume`, Grok needs `--session`), not
+        // something the user could meaningfully override per custom. Without
+        // inheritance, a "Copilot Beta" custom built on Copilot would lose
+        // the flag and right-click Ask would feed the prompt as a positional
+        // argv that Copilot ignores; a "Claude Opus" custom would lose
+        // conversation resume on relaunch.
+        return AgentTemplate(
+            id: data.id,
+            title: data.title.isEmpty ? data.id : data.title,
+            symbol: data.symbol.isEmpty ? (base?.symbol ?? "wand.and.stars") : data.symbol,
+            iconAsset: data.iconAsset.isEmpty ? base?.iconAsset : data.iconAsset,
+            tintHex: data.tintHex.isEmpty ? base?.tintHex : data.tintHex,
+            initialCommand: data.command.isEmpty ? base?.initialCommand : data.command,
+            baseAgentId: data.baseAgentId.isEmpty ? nil : data.baseAgentId,
+            promptLaunchFlag: base?.promptLaunchFlag,
+            resumeFlag: base?.resumeFlag,
+            extraEnv: parseEnv(data.env)
+        )
+    }
+}
+
+/// User-defined agent entry. Stored in `settings.json` under
+/// `agents.custom`; round-tripped through `HiveSettingsModel.customAgents`.
+struct CustomAgentData: Hashable, Identifiable {
+    /// Slug — must be unique across builtin + custom. Generated as
+    /// `custom-N` on creation; user-editable from Settings.
+    var id: String
+    /// Display title shown in the `+` menu and Settings row.
+    var title: String
+    /// Full launch command, e.g. `aichat --model gpt-4o`. Whitespace-split
+    /// by the wrapper's `eval`, same as the `agents.options` field.
+    var command: String
+    /// `id` of a builtin agent whose icon / tint / SF Symbol the custom
+    /// should inherit. Empty = no inheritance (generic `wand.and.stars` +
+    /// no tint). Surfaced as the "based on" picker in Settings so a user
+    /// can build "Claude Opus" variants that visually belong to the Claude
+    /// family without touching iconAsset / tintHex directly.
+    var baseAgentId: String
+    /// Bundled PNG asset name (matches files in `Resources/Icons/`). Power-
+    /// user override; UI doesn't expose this in v1. Empty falls back to
+    /// the `baseAgentId` builtin's iconAsset, or nil if no base.
+    var iconAsset: String
+    /// SF Symbol override. Power-user; UI hides this. Empty falls back to
+    /// the base's symbol, then to `wand.and.stars`.
+    var symbol: String
+    /// sRGB hex (no `#`) for the sidebar pip tint. Power-user; UI hides
+    /// this. Empty falls back to base's tintHex, then nil.
+    var tintHex: String
+    /// Extra environment variables for the agent, in `.env` syntax (one
+    /// `KEY=VALUE` per line). Parsed into `AgentTemplate.extraEnv` by
+    /// `AgentTemplate.parseEnv` at `fromCustom` time. v1 only takes effect
+    /// for Claude-Code-based customs — written into a per-agent Claude
+    /// settings file (`--settings`), never exported to the shell.
+    var env: String
+
+    init(
+        id: String,
+        title: String = "",
+        command: String = "",
+        baseAgentId: String = "",
+        iconAsset: String = "",
+        symbol: String = "",
+        tintHex: String = "",
+        env: String = ""
+    ) {
+        self.id = id
+        self.title = title
+        self.command = command
+        self.baseAgentId = baseAgentId
+        self.iconAsset = iconAsset
+        self.symbol = symbol
+        self.tintHex = tintHex
+        self.env = env
+    }
+}

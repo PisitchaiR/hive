@@ -1,0 +1,129 @@
+import Foundation
+
+struct GitDiffInfo: Equatable {
+    let cwd: String
+    let path: String
+    let staged: Bool
+    let isUntracked: Bool
+
+    var fileName: String {
+        path.components(separatedBy: "/").last(where: { !$0.isEmpty }) ?? path
+    }
+}
+
+/// Coarse "what's the agent doing" status, surfaced as a sidebar dot. Stage 1
+/// is UI-only; Stage 2 will drive these from real agent hooks (Claude Code's
+/// `--settings` hooks, Codex equivalents) over a unix socket.
+enum SessionActivityState: Equatable {
+    case idle
+    case running
+    case attention
+}
+
+@MainActor
+@Observable
+final class Session: Identifiable {
+    let id: UUID
+    let engine: any TerminalEngine
+    /// Initial template the tab was opened with. Promoted at runtime when an
+    /// agent's hooks fire from a plain `terminal` session — e.g. user types
+    /// `claude` inside a Terminal tab → upgraded to `.claudeCode` so the
+    /// sidebar / tab icon and agent state-tracking start working.
+    var agent: AgentTemplate
+    /// Per-tab cwd. Initialized from the workspace's cwd at spawn, then kept in
+    /// sync via OSC 7 (`engine.onPwdChange`). Drives the tab title so users see
+    /// where they are, not which agent template the tab was launched from.
+    var currentDirectory: URL
+    /// Runtime state; not persisted. Resets to `.idle` after relaunch.
+    var activityState: SessionActivityState = .idle
+    /// Empty / whitespace input via `renameTab` clears this back to `nil` so
+    /// the tab title resumes tracking the cwd.
+    var customTitle: String?
+    /// Title the running program set via `OSC 0` / `OSC 2` (libghostty's
+    /// `GHOSTTY_ACTION_SET_TITLE`) — e.g. the `user@host:dir` an `ssh` remote
+    /// shell emits. Runtime-only, never persisted. The shell wrapper re-emits
+    /// the cwd as the title each prompt (`_hive_title_pwd`), which the path
+    /// filter in `onTitleChange` maps back to `nil` — so a leftover `ssh` /
+    /// TUI title can't outlive the program once control returns to the prompt.
+    var terminalTitle: String?
+    /// Last conversation id this tab's agent reported (currently only Claude
+    /// — its SessionStart / Stop / SessionEnd hook JSON input carries
+    /// `session_id`). Persisted via `PersistedTab.conversationId` so that the
+    /// next hive launch can spawn the agent with `--resume <id>` and
+    /// continue the conversation where the user left off. Per-Session field
+    /// (not per-Pane / per-Workspace) because each tab is its own
+    /// conversation — `HIVE_SURFACE_ID` already routes hook payloads to
+    /// the correct Session, so multi-tab Claude users don't cross-attribute.
+    var conversationId: String?
+    /// Exit status of the most recent command — populated from libghostty's
+    /// `OSC 133;D` event. `nil` until the shell reports its first finish (or
+    /// when it omits the exit field). Not persisted: each launch starts fresh.
+    var lastCommandExit: Int?
+    /// Wall-clock duration of the most recent command in seconds. Same source
+    /// as `lastCommandExit`; `nil` until first OSC 133;D arrives.
+    var lastCommandDuration: TimeInterval?
+
+    /// Per-session search state mirrored from libghostty's `start_search` /
+    /// `search:<text>` / `navigate_search` / `end_search` action_cbs. Each
+    /// surface owns its own search internally, so hive tracks the state per
+    /// session — multiple panes can be in search mode at the same time, each
+    /// with its own needle and result count. `searchSelected = -1` is
+    /// libghostty's "no current match" sentinel.
+    var searchActive = false
+    var searchNeedle = ""
+    var searchTotal = 0
+    var searchSelected = -1
+
+    /// Latest git status for the session's cwd. `branch == nil` when the cwd
+    /// isn't inside a git repo (or git isn't installed). Refreshed by
+    /// `WorkspaceStore` on cwd-change + command-finished hooks. Runtime-only;
+    /// not persisted.
+    /// When set, this session is a file-viewer tab rather than a live terminal.
+    /// `PaneView` renders `FileContentViewer` instead of `TerminalView`.
+    var fileViewerURL: URL? = nil
+    /// When set, this session is a diff-viewer tab.
+    /// `PaneView` renders `GitDiffViewer` instead of `TerminalView`.
+    var gitDiffInfo: GitDiffInfo? = nil
+
+    var gitStatus: GitStatus = .empty
+
+    /// Project-environment indicators (Python venv name, Node version)
+    /// reported by the live shell prompt hook, with project-file fallback.
+    var environment: ProjectEnvironment = .empty
+
+    /// Latest live shell env reported by the prompt hook. Kernel proc env
+    /// snapshots are not reliable after `nvm use` / `activate` mutate the
+    /// running shell, so this takes priority when present.
+    var shellEnvironment: [String: String] = [:]
+
+    /// Tab-pill name. Precedence: `customTitle` (manual rename) wins, then
+    /// `terminalTitle` (OSC title from the running program, e.g. an `ssh`
+    /// remote), then `lastPathComponent` of the cwd (`~` for $HOME). An empty
+    /// cwd path falls back to the agent name so a degenerate URL doesn't
+    /// render as blank.
+    var title: String {
+        if let url = fileViewerURL { return url.lastPathComponent }
+        if let diff = gitDiffInfo { return diff.fileName }
+        if let custom = customTitle, !custom.isEmpty { return custom }
+        if let reported = terminalTitle, !reported.isEmpty { return reported }
+        if currentDirectory.standardizedFileURL.path == NSHomeDirectory() { return "~" }
+        let last = currentDirectory.lastPathComponent
+        return last.isEmpty ? agent.title : last
+    }
+
+    init(
+        id: UUID = UUID(),
+        engine: any TerminalEngine,
+        currentDirectory: URL,
+        agent: AgentTemplate,
+        customTitle: String? = nil,
+        conversationId: String? = nil
+    ) {
+        self.id = id
+        self.engine = engine
+        self.currentDirectory = currentDirectory
+        self.agent = agent
+        self.customTitle = customTitle
+        self.conversationId = conversationId
+    }
+}

@@ -1,0 +1,48 @@
+# Swift / SPM
+.build/
+.swiftpm/
+Packages/
+Package.resolved
+
+# Xcode
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcworkspace/xcuserdata/
+DerivedData/
+build/
+xcuserdata/
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*~
+
+# Misc
+.netrc
+
+# Local Claude Code settings (per-machine, not for shared repo)
+.claude/settings.local.json
+
+# Vendored prebuilt binaries — fetched via scripts/setup-libghostty.sh on first build
+Vendor/
+
+# .app bundle output (build-app.sh)
+dist/
+
+# Local AI agent context — not for public history
+CLAUDE.md
+AGENTS.md
+AGENT.md
+GEMINI.md
+.cursorrules
+.cursor/
+.clinerules
+.windsurfrules
+.continue/
+
+# Antigravity CLI runtime state (project-scoped symlinks into ~/.gemini)
+.antigravitycli/
