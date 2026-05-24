@@ -6,7 +6,7 @@
 
 เทอร์มินัล macOS สไตล์มินิมอลที่ออกแบบมาสำหรับ AI coding โดยเฉพาะ รองรับ workspace ในแถบด้านข้าง, แบ่งหน้าจอแนวนอน/แนวตั้ง, เปิด agent ด้วยคลิกเดียว, ดูสถานะ agent แบบเรียลไทม์, และตรวจสอบสถานะ workspace พร้อมสลับ Node และ branch ได้ในคลิกเดียว โอเพนซอร์ส ลิขสิทธิ์ MIT ไม่ต้องสมัครบัญชี ไม่มีการส่งข้อมูล สถานะแอปเก็บไว้บนเครื่องทั้งหมด เรนเดอร์ด้วย GPU ผ่าน [libghostty](https://github.com/ghostty-org/ghostty)
 
-**[ดาวน์โหลดเวอร์ชันล่าสุด](https://github.com/pisitchai/Hive/releases/latest)**  ·  [บันทึกการเปลี่ยนแปลง](CHANGELOG.md)
+**[ดาวน์โหลดเวอร์ชันล่าสุด](https://github.com/PisitchaiR/hive/releases/latest)**  ·  [บันทึกการเปลี่ยนแปลง](CHANGELOG.md)
 
 ---
 
@@ -34,7 +34,7 @@
 
 ## การติดตั้ง
 
-ดาวน์โหลด `.dmg` ล่าสุดจาก [Releases](https://github.com/pisitchai/Hive/releases) เปิดแล้วลาก `Hive.app` ไปที่ `Applications`
+ดาวน์โหลด `.dmg` ล่าสุดจาก [Releases](https://github.com/PisitchaiR/hive/releases) เปิดแล้วลาก `Hive.app` ไปที่ `Applications`
 
 **การเปิดครั้งแรกจะถูก Gatekeeper บล็อก** เพราะ build ใช้ adhoc signature (ยังไม่มี Apple Developer ID — การ sign และ notarize สำหรับการแจกจ่ายสาธารณะจะมาเมื่อมีผู้ใช้จริง) คุณจะเห็น *"Hive cannot be opened because Apple cannot check it for malicious software"* หรือ *"is damaged and cannot be opened"* เลือกวิธีข้ามที่เหมาะกับคุณ:
 

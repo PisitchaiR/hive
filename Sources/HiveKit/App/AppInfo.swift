@@ -5,14 +5,14 @@ import Foundation
 /// About panel matches the latest CHANGELOG `vX.Y` tag.
 enum HiveApp {
     static let name = "hive"
-    static let displayVersion = "0.14.1"
+    static let displayVersion = "0.14.2"
     static let tagline = "A minimal modern terminal for AI coding"
     static let author = "Corey Chiu"
     static let authorURL = URL(string: "https://coreychiu.com")!
     static let copyrightYear = "2026"
 
-    static let repositoryURL = URL(string: "https://github.com/iAmCorey/hive")!
-    static let issuesURL = URL(string: "https://github.com/iAmCorey/hive/issues")!
+    static let repositoryURL = URL(string: "https://github.com/PisitchaiR/hive")!
+    static let issuesURL = URL(string: "https://github.com/PisitchaiR/hive/issues")!
     /// Mirrors `repositoryURL`; update both if the repo is ever renamed.
-    static let releasesAPIURL = URL(string: "https://api.github.com/repos/iAmCorey/hive/releases/latest")!
+    static let releasesAPIURL = URL(string: "https://api.github.com/repos/PisitchaiR/hive/releases/latest")!
 }

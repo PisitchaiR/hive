@@ -23,7 +23,7 @@ enum HiveSettings {
     /// overrides; uncomment to opt in.
     static let defaultTemplate: String = """
     // hive settings
-    // Docs: https://github.com/iAmCorey/hive#configuration
+    // Docs: https://github.com/PisitchaiR/hive#configuration
     // Uncomment a line to override the default.
     {
       // === hive-specific ===

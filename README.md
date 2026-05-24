@@ -6,7 +6,7 @@
 
 A minimal modern terminal built for AI coding. Sidebar workspaces; horizontal / vertical split panes; one-click agent launch; per-agent activity readout; live workspace state with one-click Node and branch switching. Open-source, MIT-licensed. No accounts, no telemetry; app state stays local. GPU rendering via [libghostty](https://github.com/ghostty-org/ghostty).
 
-**[Download latest](https://github.com/pisitchai/Hive/releases/latest)**  ·  [Changelog](CHANGELOG.md)
+**[Download latest](https://github.com/PisitchaiR/hive/releases/latest)**  ·  [Changelog](CHANGELOG.md)
 
 ---
 
@@ -34,7 +34,7 @@ A minimal modern terminal built for AI coding. Sidebar workspaces; horizontal / 
 
 ## Install
 
-Download the latest `.dmg` from [Releases](https://github.com/pisitchai/Hive/releases). Open it and drag `Hive.app` to `Applications`.
+Download the latest `.dmg` from [Releases](https://github.com/PisitchaiR/hive/releases). Open it and drag `Hive.app` to `Applications`.
 
 **First launch is blocked by Gatekeeper** because the build is adhoc-signed (no Apple Developer ID yet — public-distribution signing and notarization will come when there are real users). You'll see *"Hive cannot be opened because Apple cannot check it for malicious software"* or *"is damaged and cannot be opened"*. Pick whichever bypass works for you:
 
