@@ -52,6 +52,7 @@ let package = Package(
                 // keyboard layout. Pulled in implicitly by SwiftTerm before;
                 // now declared directly.
                 .linkedFramework("Carbon"),
+                .linkedFramework("CoreServices"),
             ]
         ),
         .binaryTarget(

@@ -1,3 +1,4 @@
+import CoreServices
 import Darwin
 import Foundation
 
@@ -19,6 +20,7 @@ final class GitWatcher {
     private var watchedCwd: URL?
     private let onChange: () -> Void
     private var pendingRefresh: DispatchWorkItem?
+    private var eventStream: FSEventStreamRef?
 
     init(onChange: @escaping () -> Void) {
         self.onChange = onChange
@@ -38,10 +40,12 @@ final class GitWatcher {
         guard let gitDir = Self.findGitDir(near: cwd) else { return }
         attach(path: gitDir.appendingPathComponent("HEAD").path)
         attach(path: gitDir.appendingPathComponent("index").path)
+        startFSEvents(repoRoot: gitDir.deletingLastPathComponent())
     }
 
     func cancel() {
         tearDownSources()
+        stopFSEvents()
         watchedCwd = nil
         pendingRefresh?.cancel()
         pendingRefresh = nil
@@ -53,6 +57,47 @@ final class GitWatcher {
     private func tearDownSources() {
         for w in watches { w.source.cancel() }
         watches.removeAll()
+    }
+
+    private func startFSEvents(repoRoot: URL) {
+        stopFSEvents()
+        let pathsToWatch = [repoRoot.path] as CFArray
+        var ctx = FSEventStreamContext(
+            version: 0,
+            info: Unmanaged.passUnretained(self).toOpaque(),
+            retain: nil, release: nil, copyDescription: nil
+        )
+        let flags = FSEventStreamCreateFlags(
+            kFSEventStreamCreateFlagFileEvents |
+            kFSEventStreamCreateFlagUseCFTypes |
+            kFSEventStreamCreateFlagIgnoreSelf
+        )
+        let callback: FSEventStreamCallback = { _, info, numEvents, eventPaths, _, _ in
+            guard let info, numEvents > 0 else { return }
+            let cfPaths = Unmanaged<CFArray>.fromOpaque(eventPaths).takeUnretainedValue() as NSArray
+            let paths = cfPaths.compactMap { $0 as? String }
+            // Ignore changes inside .git/ — already handled by kqueue.
+            let hasWorkingTreeChange = paths.contains { !$0.contains("/.git/") }
+            guard hasWorkingTreeChange else { return }
+            let watcher = Unmanaged<GitWatcher>.fromOpaque(info).takeUnretainedValue()
+            DispatchQueue.main.async { watcher.scheduleRefresh() }
+        }
+        guard let stream = FSEventStreamCreate(
+            nil, callback, &ctx, pathsToWatch,
+            FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
+            0.3, flags
+        ) else { return }
+        FSEventStreamSetDispatchQueue(stream, .main)
+        FSEventStreamStart(stream)
+        eventStream = stream
+    }
+
+    private func stopFSEvents() {
+        guard let stream = eventStream else { return }
+        FSEventStreamStop(stream)
+        FSEventStreamInvalidate(stream)
+        FSEventStreamRelease(stream)
+        eventStream = nil
     }
 
     private func attach(path: String) {
