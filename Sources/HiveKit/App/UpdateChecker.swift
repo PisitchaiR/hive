@@ -6,7 +6,8 @@ import Foundation
 enum UpdateChecker {
     enum Outcome {
         case upToDate(current: String)
-        case newer(latest: String, url: URL, releaseNotes: String)
+        /// `assetURL` is a direct zip/dmg download; nil means only a release page is available.
+        case newer(latest: String, assetURL: URL?, pageURL: URL, releaseNotes: String)
         case failed(String)
     }
 
@@ -44,20 +45,18 @@ enum UpdateChecker {
                 return .failed("GitHub returned HTTP \(http.statusCode).")
             }
             let release = try JSONDecoder().decode(LatestRelease.self, from: data)
-            // Prefer the attached .dmg asset so clicking "update" triggers an
-            // immediate browser download instead of detouring through the
-            // release page (one extra click, plus the user has to find the
-            // DMG in the assets list). Fall back to the release page URL if
-            // a release ships without a DMG (e.g. source-only).
-            let dmgAsset = release.assets?.first { $0.name.lowercased().hasSuffix(".dmg") }
-            let urlString = dmgAsset?.browserDownloadUrl ?? release.htmlUrl
-            guard let url = URL(string: urlString) else {
+            guard let pageURL = URL(string: release.htmlUrl) else {
                 return .failed("Couldn't parse release URL.")
             }
+            let downloadAsset = release.assets?.first {
+                let n = $0.name.lowercased()
+                return n.hasSuffix(".zip") || n.hasSuffix(".dmg")
+            }
+            let assetURL = downloadAsset.flatMap { URL(string: $0.browserDownloadUrl) }
             let latest = Version.stripLeadingV(release.tagName)
             if Version.compare(latest, currentVersion) == .orderedDescending {
                 let notes = release.body?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                return .newer(latest: latest, url: url, releaseNotes: notes)
+                return .newer(latest: latest, assetURL: assetURL, pageURL: pageURL, releaseNotes: notes)
             }
             return .upToDate(current: currentVersion)
         } catch {

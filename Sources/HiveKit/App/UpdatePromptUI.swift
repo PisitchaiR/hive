@@ -9,7 +9,7 @@ struct UpdatePromptView: View {
     let outcome: UpdateChecker.Outcome
     let currentVersion: String
     let onClose: () -> Void
-    let onDownload: (URL) -> Void
+    let updater: AutoUpdater
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -66,7 +66,7 @@ struct UpdatePromptView: View {
     @ViewBuilder
     private var content: some View {
         switch outcome {
-        case .newer(_, _, let notes) where !notes.isEmpty:
+        case .newer(_, _, _, let notes) where !notes.isEmpty:
             VStack(alignment: .leading, spacing: 10) {
                 Text("release-notes")
                     .font(Theme.mono(10, weight: .medium))
@@ -91,11 +91,34 @@ struct UpdatePromptView: View {
     @ViewBuilder
     private var actions: some View {
         switch outcome {
-        case .newer(_, let url, _):
-            BracketButton("later", action: onClose)
-            BracketButton("update") {
-                onDownload(url)
-                onClose()
+        case .newer(_, let assetURL, let pageURL, _):
+            switch updater.phase {
+            case .idle:
+                BracketButton("later", action: onClose)
+                if let assetURL {
+                    BracketButton("update") { Task { await updater.start(zipURL: assetURL) } }
+                } else {
+                    BracketButton("download") { NSWorkspace.shared.open(pageURL); onClose() }
+                }
+            case .downloading:
+                Text("downloading…")
+                    .font(Theme.mono(12))
+                    .foregroundStyle(Theme.chromeMuted)
+            case .extracting:
+                Text("installing…")
+                    .font(Theme.mono(12))
+                    .foregroundStyle(Theme.chromeMuted)
+            case .failed(let reason):
+                VStack(alignment: .trailing, spacing: 8) {
+                    Text(reason)
+                        .font(Theme.mono(11))
+                        .foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: 10) {
+                        BracketButton("close", action: onClose)
+                        BracketButton("open page") { NSWorkspace.shared.open(pageURL); onClose() }
+                    }
+                }
             }
         case .upToDate, .failed:
             BracketButton("done", action: onClose)
@@ -114,7 +137,7 @@ struct UpdatePromptView: View {
 
     private var headlineText: String {
         switch outcome {
-        case .newer(let latest, _, _): return latest
+        case .newer(let latest, _, _, _): return latest
         case .upToDate(let current): return current
         case .failed: return "couldn't reach github"
         }
@@ -132,12 +155,14 @@ struct UpdatePromptView: View {
 @MainActor
 final class UpdatePromptWindowController: NSWindowController {
     static let shared = UpdatePromptWindowController()
+    private let updater = AutoUpdater()
 
     private init() { super.init(window: nil) }
     required init?(coder: NSCoder) { fatalError() }
 
     static func present(outcome: UpdateChecker.Outcome, currentVersion: String) {
         let controller = shared
+        controller.updater.phase = .idle
         controller.build(outcome: outcome, currentVersion: currentVersion)
         if controller.window?.isVisible != true {
             controller.window?.center()
@@ -151,7 +176,7 @@ final class UpdatePromptWindowController: NSWindowController {
             outcome: outcome,
             currentVersion: currentVersion,
             onClose: { [weak self] in self?.window?.close() },
-            onDownload: { url in NSWorkspace.shared.open(url) }
+            updater: updater
         )
         let host = NSHostingController(rootView: view)
         // NSHostingController computes its preferred size from the SwiftUI
