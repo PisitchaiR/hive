@@ -1,7 +1,14 @@
 # Third-party notices
 
-kooky bundles or links the following third-party projects. Each retains its
-upstream license; nothing here is dual-licensed under kooky's MIT.
+Hive bundles or links the following third-party projects. Each retains its
+upstream license; nothing here is dual-licensed under Hive's MIT.
+
+## Upstream project
+
+### kooky
+- Source: <https://github.com/iAmCorey/kooky>
+- License: MIT
+- Note: Hive is derived from kooky. Architecture, UI patterns, and portions of the codebase originate from this project. kooky's MIT copyright notice is preserved in the LICENSE file.
 
 ## Bundled in the source tree
 
@@ -9,17 +16,17 @@ upstream license; nothing here is dual-licensed under kooky's MIT.
 - Source: <https://github.com/google/fonts/tree/main/ofl/onest>
 - Designer: Martín Sznaider, Indian Type Foundry
 - License: SIL Open Font License 1.1
-- File: `Sources/KookyKit/Resources/Fonts/Onest.ttf`
+- File: `Sources/HiveKit/Resources/Fonts/Onest.ttf`
 
 ### JetBrains Mono (font)
 - Source: <https://github.com/JetBrains/JetBrainsMono>
 - License: SIL Open Font License 1.1
-- File: `Sources/KookyKit/Resources/Fonts/JetBrainsMono-Regular.ttf`
+- File: `Sources/HiveKit/Resources/Fonts/JetBrainsMono-Regular.ttf`
 
 ### lobe-icons (brand PNGs)
 - Source: <https://github.com/lobehub/lobe-icons>
 - License: MIT
-- Files: `Sources/KookyKit/Resources/Icons/{claudecode,codex,gemini,opencode,amp,cursor,githubcopilot}.png`
+- Files: `Sources/HiveKit/Resources/Icons/{claudecode,codex,gemini,opencode,amp,cursor,githubcopilot}.png`
 
 ## Pulled at build time
 

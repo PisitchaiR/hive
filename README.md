@@ -1,14 +1,12 @@
-# kooky
+# Hive
 
 > *A minimal modern terminal for AI coding.*
 
-🇬🇧 English  ·  🇨🇳 [中文](README_CN.md)
-
-![kooky — sidebar with three workspaces, two panes running Claude Code and Codex side by side, the `+` menu showing the seven built-in agent templates](screenshot.png)
+🇬🇧 English  ·  🇹🇭 [ภาษาไทย](README_TH.md)
 
 A minimal modern terminal built for AI coding. Sidebar workspaces; horizontal / vertical split panes; one-click agent launch; per-agent activity readout; live workspace state with one-click Node and branch switching. Open-source, MIT-licensed. No accounts, no telemetry; app state stays local. GPU rendering via [libghostty](https://github.com/ghostty-org/ghostty).
 
-**[Download latest](https://github.com/iAmCorey/kooky/releases/latest)**  ·  [Changelog](CHANGELOG.md)
+**[Download latest](https://github.com/pisitchai/Hive/releases/latest)**  ·  [Changelog](CHANGELOG.md)
 
 ---
 
@@ -16,7 +14,7 @@ A minimal modern terminal built for AI coding. Sidebar workspaces; horizontal / 
 
 **Vertical tabs, split panes & windows.** Sidebar workspaces with three-state collapse (`⌘⌃S`). Each pane owns its own tab strip and active tab. `⌘⇧N` opens another window. Drag a tab to reorder it, move it across panes, or drop it into a different window — the live session moves whole, scrollback and running process intact. State persists across launches; every open window is restored.
 
-**One-click AI agent sessions.** Claude Code · Codex · Gemini CLI · OpenCode · Amp · Cursor CLI · Copilot CLI · Grok Build · Antigravity CLI. Pick one from the `+` menu; the agent boots before your first prompt prints. Claude conversations also auto-resume across kooky restarts so closing and reopening a tab picks up where you left off.
+**One-click AI agent sessions.** Claude Code · Codex · Gemini CLI · OpenCode · Amp · Cursor CLI · Copilot CLI · Grok Build · Antigravity CLI. Pick one from the `+` menu; the agent boots before your first prompt prints. Claude conversations also auto-resume across Hive restarts so closing and reopening a tab picks up where you left off.
 
 **Right-click a selection → "Ask <agent>".** Select an error / log line / file path, right-click, pick any agent — a new tab spawns with the selection already submitted as the first prompt. Zero ⌘C / ⌘V to go from "what is this" to an actual answer.
 
@@ -28,32 +26,32 @@ A minimal modern terminal built for AI coding. Sidebar workspaces; horizontal / 
 
 **SwiftUI-native, minimal chrome.** Onest + JetBrains Mono. Custom About panel, native menus with shortcut hints, full IME support.
 
-**Configurable.** Settings (`⌘,`) with a sidebar layout: **Terminal** (font / cursor / size), **Agents** (drag to reorder, toggle visibility, set per-agent launch options like `--model opus`, pick a default that `+` and `⌘T` open without a popover, define your own custom agents — point a Claude Code-based one at a mirror or proxy with its own endpoint and API key), **Advanced** (open raw JSON). All overrides live in `~/.kooky/settings.json` — ghostty's own `~/.config/ghostty/config` is read first and your overrides layer on top; first-launch offers to import an existing ghostty setup.
+**Configurable.** Settings (`⌘,`) with a sidebar layout: **Terminal** (font / cursor / size), **Agents** (drag to reorder, toggle visibility, set per-agent launch options like `--model opus`, pick a default that `+` and `⌘T` open without a popover, define your own custom agents — point a Claude Code-based one at a mirror or proxy with its own endpoint and API key), **Advanced** (open raw JSON). All overrides live in `~/.hive/settings.json` — ghostty's own `~/.config/ghostty/config` is read first and your overrides layer on top; first-launch offers to import an existing ghostty setup.
 
-**Local by default.** No accounts, no telemetry, no cloud sync. Kooky keeps its own state on your device.
+**Local by default.** No accounts, no telemetry, no cloud sync. Hive keeps its own state on your device.
 
 **libghostty-powered.** GPU-accelerated cell rendering, same engine as ghostty. Fast.
 
 ## Install
 
-Download the latest `.dmg` from [Releases](https://github.com/iAmCorey/kooky/releases). Open it and drag `Kooky.app` to `Applications`.
+Download the latest `.dmg` from [Releases](https://github.com/pisitchai/Hive/releases). Open it and drag `Hive.app` to `Applications`.
 
-**First launch is blocked by Gatekeeper** because the build is adhoc-signed (no Apple Developer ID yet — public-distribution signing and notarization will come when there are real users). You'll see *"Kooky cannot be opened because Apple cannot check it for malicious software"* or *"is damaged and cannot be opened"*. Pick whichever bypass works for you:
+**First launch is blocked by Gatekeeper** because the build is adhoc-signed (no Apple Developer ID yet — public-distribution signing and notarization will come when there are real users). You'll see *"Hive cannot be opened because Apple cannot check it for malicious software"* or *"is damaged and cannot be opened"*. Pick whichever bypass works for you:
 
 <details>
 <summary><b>Path A — System Settings <i>(recommended)</i></b></summary>
 
-1. Double-click `Kooky.app`. If shows the warning. Dismiss it.
+1. Double-click `Hive.app`. You'll see the warning. Dismiss it.
 2. **System Settings → Privacy & Security**, scroll to **Security**.
-3. Click **Open Anyway** next to *"Kooky was blocked to protect your Mac"*. Enter your password.
-4. Double-click `Kooky.app` again → click **Open**. Done.
+3. Click **Open Anyway** next to *"Hive was blocked to protect your Mac"*. Enter your password.
+4. Double-click `Hive.app` again → click **Open**. Done.
 </details>
 
 <details>
 <summary><b>Path B — Terminal (one-liner)</b></summary>
 
 ```sh
-xattr -d com.apple.quarantine /Applications/Kooky.app
+xattr -d com.apple.quarantine /Applications/Hive.app
 ```
 </details>
 
@@ -65,11 +63,11 @@ Sequoia sometimes hides the Open Anyway button entirely for adhoc-signed apps. R
 ```sh
 sudo spctl --global-disable      # macOS 15+; older systems use --master-disable
 # System Settings → Privacy & Security → "Allow applications from" → Anywhere
-# Open Kooky.app → it now launches
+# Open Hive.app → it now launches
 sudo spctl --global-enable       # turn Gatekeeper back on
 ```
 
-This is **system-wide** while disabled. Re-enable as soon as kooky launches once (the per-app whitelist persists).
+This is **system-wide** while disabled. Re-enable as soon as Hive launches once (the per-app whitelist persists).
 </details>
 
 macOS only blocks the first launch. After that, Spotlight / Dock / Finder all work normally.
@@ -82,10 +80,10 @@ Requires Xcode 26+ and macOS 14+ (Sonoma — `@Observable` is the floor).
 ./scripts/setup-libghostty.sh        # one-time: fetch the libghostty xcframework
 swift build
 swift run                            # dev mode
-swift test                           # 160 unit tests
+swift test                           # unit tests
 
-./scripts/build-app.sh               # writes dist/Kooky.app
-./scripts/build-dmg.sh --build       # writes dist/Kooky-vX.Y.Z.dmg
+./scripts/build-app.sh               # writes dist/Hive.app
+./scripts/build-dmg.sh --build       # writes dist/Hive-vX.Y.Z.dmg
 ```
 
 `Vendor/` and `dist/` are gitignored. The libghostty setup script is idempotent.
