@@ -34,6 +34,13 @@ struct ContentView: View {
         }
         .background(chromeBackground)
         .ignoresSafeArea(.all)
+        .overlay {
+            if store.isQuickOpenVisible {
+                QuickOpenView(store: store)
+                    .transition(.opacity.combined(with: .scale(scale: 0.97)))
+            }
+        }
+        .animation(.easeOut(duration: 0.12), value: store.isQuickOpenVisible)
     }
 
     /// Top 32pt strip. `window.isMovable = false` is set globally, so this

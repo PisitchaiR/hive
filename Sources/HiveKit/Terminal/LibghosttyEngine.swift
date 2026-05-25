@@ -479,9 +479,10 @@ final class GhosttySurfaceView: NSView {
         layer?.contentsScale = scale
 
         let workingDir = config.workingDirectory ?? NSHomeDirectory()
-        // Merge our wrapper ZDOTDIR into the caller's env dict. AgentTemplate
-        // populates HIVE_AGENT here so the wrapper .zshrc auto-launches the
-        // selected CLI before the user ever sees a shell prompt.
+        // ZDOTDIR is set by `zshLauncherPath` (the shell command for zsh
+        // sessions) before exec'ing zsh, so it reliably loads the wrapper
+        // `.zshrc`. We still pass it here as a belt-and-suspenders fallback
+        // for any edge case where the launcher is unavailable.
         var envDict = config.environment
         envDict[HiveShellIntegration.zdotdirKey] = HiveShellIntegration.zshDirectory
         // Dynamic count of env entries — strdup each, free after surface_new.
