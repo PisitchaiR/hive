@@ -24,17 +24,23 @@ final class AgentTemplateTests: XCTestCase {
     }
 
     func testTerminalTemplateUsesUserDefaultShell() {
+        // zsh/bash users get a launcher script (sets ZDOTDIR / --rcfile so
+        // wrapper rc loads); only `.other` shells (fish/nu) get $SHELL raw.
+        let cmd = AgentTemplate.terminal.makeSessionConfig().command
         let expected = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
-        XCTAssertEqual(AgentTemplate.terminal.makeSessionConfig().command, expected)
+        XCTAssertTrue(
+            cmd == expected || cmd.contains("hive-zsh-launch-") || cmd.contains("hive-bash-launch-"),
+            "terminal launched without a recognised shell path: \(cmd)"
+        )
     }
 
     func testAgentTemplatesPickAShellWithIntegrationWrapper() {
-        // Agent must run under one of our wrappers (zsh ZDOTDIR or bash
-        // --rcfile) — anything else means HIVE_AGENT never fires.
+        // Agent must run under one of our wrappers (zsh ZDOTDIR launcher or
+        // bash --rcfile launcher) — anything else means HIVE_AGENT never fires.
         for template in AgentTemplate.all where template.id != "terminal" {
             let cmd = template.makeSessionConfig().command
             XCTAssertTrue(
-                cmd == "/bin/zsh" || cmd.contains("hive-bash-launch-"),
+                cmd.contains("hive-zsh-launch-") || cmd.contains("hive-bash-launch-"),
                 "agent template \(template.id) launched without a hive shell wrapper: \(cmd)"
             )
         }
