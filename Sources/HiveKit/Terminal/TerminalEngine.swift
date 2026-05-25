@@ -11,9 +11,10 @@ struct TerminalSessionConfig {
         return TerminalSessionConfig(command: shell, arguments: ["--login"], workingDirectory: nil, environment: [:])
     }
 
-    /// Pinned zsh — pairs with the ZDOTDIR wrapper for HIVE_AGENT + OSC 7.
+    /// Pinned zsh via launcher script — launcher sets ZDOTDIR to the wrapper
+    /// directory before exec'ing zsh, guaranteeing the wrapper `.zshrc` loads.
     static func zshShell() -> TerminalSessionConfig {
-        TerminalSessionConfig(command: HiveShellIntegration.zshPath, arguments: ["--login"], workingDirectory: nil, environment: [:])
+        TerminalSessionConfig(command: HiveShellIntegration.zshLauncherPath, arguments: [], workingDirectory: nil, environment: [:])
     }
 
     /// Bash via launcher script — direct `--rcfile` flags don't work because

@@ -2,6 +2,16 @@
 
 Notable changes per release. Tagged commits use `vX.Y.Z` shortform.
 
+## v0.15.0 — 2026-05-25
+
+- Quick Open (⌘P) — fuzzy-search across workspaces, open tabs, and agents from a single palette; ↩ jumps to a workspace/tab or opens a new tab in the chosen agent.
+- In-app auto-update — Hive now downloads and installs the latest release in the background (Settings → About → Check for Updates); no manual DMG needed.
+- Fixed: the git activity indicator now detects working-tree changes in real-time using FSEvents instead of polling.
+- Fixed: agent commands (Claude, Codex, etc.) now auto-launch reliably on every new tab — previously `HIVE_AGENT` was set but the shell wrapper didn't run on some systems.
+- New tabs now inherit the working directory of the active tab instead of the workspace default.
+- Agent picker popover now shows the launch directory at the bottom; click it to choose a different folder before opening the agent.
+- Fixed: tab bar activity indicators now show running (blue) and waiting (yellow) states alongside the existing command-failure (red) dot, matching the sidebar.
+
 ## v0.14.1 — 2026-05-22
 
 - Drag a tab from one window's tab bar onto another window's to move it across — the terminal, its scrollback, and any running process all come with it.

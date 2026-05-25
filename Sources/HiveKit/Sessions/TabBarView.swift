@@ -61,6 +61,10 @@ private struct AddTabButton: View {
 
     @State private var isTargeted = false
 
+    private var effectiveLaunchDir: URL {
+        pane.activeTab?.currentDirectory ?? workspace.workingDirectory
+    }
+
     var body: some View {
         HoverableIconButton(
             systemName: "plus",
@@ -91,7 +95,7 @@ private struct AddTabButton: View {
                     HiveMenuRow(title: template.title) {
                         AgentIconView(asset: template.iconAsset, fallbackSymbol: template.symbol, size: 16)
                     } action: {
-                        store.addTab(in: workspace, pane: pane, template: template)
+                        store.addTab(in: workspace, pane: pane, template: template, initialCwd: effectiveLaunchDir)
                         isMenuOpen = false
                     }
                 }

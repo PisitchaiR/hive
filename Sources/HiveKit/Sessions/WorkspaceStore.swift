@@ -66,6 +66,10 @@ final class WorkspaceStore {
     var draggingTabId: UUID?
     var sidebarMode: SidebarMode = .full
     var rightPanel: RightPanel = .hidden
+    /// True while the ⌘P Quick Open palette is visible. SwiftUI overlay in
+    /// `ContentView` observes this — toggled by `AppDelegate.handleQuickOpen`
+    /// and cleared from inside `QuickOpenView` on activate/dismiss.
+    var isQuickOpenVisible: Bool = false
     /// Fired when the last workspace closes. `HiveWindowController` wires
     /// this to close its window — a window with zero workspaces is empty.
     var onBecameEmpty: (() -> Void)?
@@ -239,7 +243,7 @@ final class WorkspaceStore {
         guard let target = pane ?? workspace.activePane ?? workspace.root.firstPane else {
             preconditionFailure("workspace has no panes")
         }
-        let cwd = initialCwd ?? workspace.workingDirectory
+        let cwd = initialCwd ?? target.activeTab?.currentDirectory ?? workspace.workingDirectory
         let session = spawnSession(template: template, initialCwd: cwd, conversationId: conversationId, initialPrompt: initialPrompt)
         wireSessionCallbacks(engine: session.engine, session: session, workspace: workspace)
         target.tabs.append(session)
