@@ -509,7 +509,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
     @objc private func handleAbout() {
         NSApp.orderFrontStandardAboutPanel(options: [
             .applicationName: HiveApp.name,
-            .applicationVersion: HiveApp.displayVersion,
+            .applicationVersion: HiveApp.bundleVersion,
             // Suppress the parenthesized build number — Info.plist sets
             // CFBundleVersion to the same string as CFBundleShortVersionString,
             // and the default "Version X (X)" reads as a typo.

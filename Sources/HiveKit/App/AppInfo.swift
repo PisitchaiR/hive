@@ -5,7 +5,15 @@ import Foundation
 /// About panel matches the latest CHANGELOG `vX.Y` tag.
 enum HiveApp {
     static let name = "hive"
-    static let displayVersion = "0.15.0"
+    static let displayVersion = "0.15.1"
+    /// Bundle version string from Info.plist — same as `displayVersion` for
+    /// release builds, but dev builds via `scripts/build-app.sh` append
+    /// `+<sha>` (or `+<sha>-dirty`) so the About panel reveals which
+    /// commit is actually running. Falls back to `displayVersion` when the
+    /// plist key is missing (e.g. `swift run` without a bundle).
+    static var bundleVersion: String {
+        (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? displayVersion
+    }
     static let tagline = "A minimal modern terminal for AI coding"
     static let author = "Corey Chiu"
     static let authorURL = URL(string: "https://coreychiu.com")!
