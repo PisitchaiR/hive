@@ -385,7 +385,7 @@ struct HiveSettingsView: View {
     private var aboutDetail: some View {
         VStack(alignment: .leading, spacing: 0) {
             SettingsRow(label: "version") {
-                Text(HiveApp.displayVersion)
+                Text(HiveApp.bundleVersion)
                     .font(Theme.mono(12))
                     .foregroundStyle(Theme.chromeMuted)
             }

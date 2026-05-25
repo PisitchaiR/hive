@@ -542,13 +542,20 @@ enum HiveShellIntegration {
     /// ghostty's `env_vars` is unreliable — if the parent process already
     /// has `ZDOTDIR` set, ghostty adds but doesn't override it, so zsh
     /// reads the wrong rc dir. The launcher sets it explicitly before exec,
-    /// which guarantees the wrapper `.zshrc` (and therefore `agentLaunchBlock`
-    /// and OSC 7 / OSC 133 hooks) always load.
+    /// which guarantees the wrapper `.zshrc` (and therefore the inline
+    /// agent launch and OSC 7 / OSC 133 hooks) always load.
     static let zshLauncherPath: String = {
         let dir = NSTemporaryDirectory()
         let launcherPath = dir.appending("hive-zsh-launch-\(getpid()).sh")
+        // `cd "$HIVE_CWD"` restores the working directory after ghostty's
+        // `/usr/bin/login -fp` wrapper resets it to $HOME. ghostty only uses
+        // the login wrapper when `command` differs from $SHELL, and our
+        // launcher script trips that heuristic — without the explicit cd
+        // every agent tab would open at $HOME instead of inheriting the
+        // previous tab's cwd.
         let launcher = """
         #!/bin/sh
+        [ -n "$HIVE_CWD" ] && cd "$HIVE_CWD" 2>/dev/null
         export ZDOTDIR="\(zshDirectory)"
         exec "\(zshPath)" --login
         """
@@ -575,6 +582,29 @@ enum HiveShellIntegration {
         bind '"\\e[1;3D": backward-word'     # Alt+Left
         bind '"\\e[1;3C": forward-word'      # Alt+Right
         bind 'set completion-ignore-case on'
+
+        # Launch HIVE_AGENT *before* sourcing user rc — symmetric with the zsh
+        # wrapper. PTY-shim shells (Amazon Q / Fig) can `exec` mid-rc and
+        # never return, leaving anything below unreachable.
+        if [[ -n "$HIVE_AGENT" && -z "$HIVE_AGENT_LAUNCHED" ]]; then
+            for _hive_extra in \\
+                "$HOME/.local/bin" \\
+                "/opt/homebrew/bin" \\
+                "/usr/local/bin" \\
+                "$HOME/.cargo/bin" \\
+                "$HOME/.bun/bin" \\
+                "$HOME/Library/pnpm" \\
+                "$HOME/.opencode/bin"
+            do
+                [[ -d "$_hive_extra" && ":$PATH:" != *":$_hive_extra:"* ]] && PATH="$PATH:$_hive_extra"
+            done
+            unset _hive_extra
+            export PATH
+            export HIVE_AGENT_LAUNCHED=1
+            _hive_cmd="$HIVE_AGENT"
+            unset HIVE_AGENT
+            eval "$_hive_cmd"
+        fi
 
         # bash is launched as interactive non-login (`--rcfile` is incompatible
         # with `-l`), so it would normally skip the login rc chain. macOS users
@@ -615,13 +645,12 @@ enum HiveShellIntegration {
         PROMPT_COMMAND="_hive_title_pwd;_hive_osc7_pwd;_hive_env_status${PROMPT_COMMAND:+;$PROMPT_COMMAND}"
         _hive_osc7_pwd
         _hive_env_status
-
-        \(agentLaunchBlock)
         """
         writeFile(at: rcfilePath, contents: bashrc)
 
         let launcher = """
         #!/bin/bash
+        [ -n "$HIVE_CWD" ] && cd "$HIVE_CWD" 2>/dev/null
         exec \(bashPath) --rcfile "\(rcfilePath)" -i
 
         """
@@ -678,6 +707,33 @@ enum HiveShellIntegration {
         _hive_title_pwd() { local _s=$?; printf '\\e]2;%s\\a' "$PWD"; return $_s }
         add-zsh-hook precmd _hive_title_pwd
 
+        # Launch HIVE_AGENT *before* sourcing user rc. Some shells (Amazon Q
+        # / Kiro CLI / Fig) emit a `exec kiro-cli-term` (or similar PTY shim)
+        # from their pre-rc init that replaces the current zsh process —
+        # control never returns, so anything we put after `source ~/.zshrc`
+        # is unreachable on those setups. Augment PATH with the most common
+        # bin dirs first so the agent shim can resolve the real binary
+        # without the user rc having run yet.
+        if [[ -n "$HIVE_AGENT" && -z "$HIVE_AGENT_LAUNCHED" ]]; then
+            for _hive_extra in \\
+                "$HOME/.local/bin" \\
+                "/opt/homebrew/bin" \\
+                "/usr/local/bin" \\
+                "$HOME/.cargo/bin" \\
+                "$HOME/.bun/bin" \\
+                "$HOME/Library/pnpm" \\
+                "$HOME/.opencode/bin"
+            do
+                [[ -d "$_hive_extra" && ":$PATH:" != *":$_hive_extra:"* ]] && PATH="$PATH:$_hive_extra"
+            done
+            unset _hive_extra
+            export PATH
+            export HIVE_AGENT_LAUNCHED=1
+            _hive_cmd="$HIVE_AGENT"
+            unset HIVE_AGENT
+            eval "$_hive_cmd"
+        fi
+
         # Replay the rc files zsh would have run if ZDOTDIR had pointed at the
         # user's real dir. Resolve via `${ZDOTDIR:-$HOME}` after each source —
         # so users who park their zsh config in a custom dir (e.g.
@@ -702,8 +758,6 @@ enum HiveShellIntegration {
         \(envStatusBlock)
 
         \(osc133Block)
-
-        \(agentLaunchBlock)
         """
         writeFile(at: (dir as NSString).appendingPathComponent(".zshrc"), contents: zshrc)
         return dir
@@ -726,21 +780,6 @@ enum HiveShellIntegration {
     }
 
     // MARK: - Internals
-
-    /// Inline agent launch — invoked by both wrapper rcs to start HIVE_AGENT
-    /// before the first prompt prints. HIVE_AGENT_LAUNCHED guards against
-    /// re-entry from subshells the agent itself may spawn.
-    private static let agentLaunchBlock = """
-        if [[ -n "$HIVE_AGENT" && -z "$HIVE_AGENT_LAUNCHED" ]]; then
-            export HIVE_AGENT_LAUNCHED=1
-            _hive_cmd="$HIVE_AGENT"
-            unset HIVE_AGENT
-            # `eval` lets HIVE_AGENT carry multi-word commands (e.g. an
-            # editor + file path); single-word agent commands like `claude`
-            # behave identically.
-            eval "$_hive_cmd"
-        fi
-        """
 
     /// Two layers of memoization in this hook avoid heavy per-prompt work:
     /// (a) `node --version` is the dominant cost (~50-200ms for V8 cold-start
