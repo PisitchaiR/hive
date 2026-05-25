@@ -2,6 +2,12 @@
 
 Notable changes per release. Tagged commits use `vX.Y.Z` shortform.
 
+## v0.15.1 — 2026-05-26
+
+- Fixed: agent auto-launch on systems with PTY-shim shells (Amazon Q / Kiro CLI / Fig) — previously the user's `.zshrc` `exec`'d into the shim mid-source, so the wrapper never reached `agentLaunchBlock` and the agent didn't start. Hive now launches the agent before sourcing user rc.
+- Fixed: new tabs no longer land at `$HOME` — ghostty's `/usr/bin/login -fp` wrapper resets cwd, so the launcher now restores the intended directory from `HIVE_CWD` before starting the shell. New tabs again inherit the previous tab's working directory.
+- About panel now shows the Info.plist version string, so dev builds reveal the commit SHA suffix (e.g. `0.15.0+8d4af42-dirty`) instead of the bare release version.
+
 ## v0.15.0 — 2026-05-25
 
 - Quick Open (⌘P) — fuzzy-search across workspaces, open tabs, and agents from a single palette; ↩ jumps to a workspace/tab or opens a new tab in the chosen agent.

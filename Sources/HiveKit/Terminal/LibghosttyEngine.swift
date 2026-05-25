@@ -485,6 +485,12 @@ final class GhosttySurfaceView: NSView {
         // for any edge case where the launcher is unavailable.
         var envDict = config.environment
         envDict[HiveShellIntegration.zdotdirKey] = HiveShellIntegration.zshDirectory
+        // `/usr/bin/login -fp` (ghostty's wrapper when `command` differs from
+        // $SHELL) chdir's to $HOME and overwrites PWD before exec'ing the
+        // launcher, defeating ghostty's `working_directory`. Carry the
+        // intended cwd through a separate env var so the launcher can
+        // restore it.
+        envDict["HIVE_CWD"] = workingDir
         // Dynamic count of env entries — strdup each, free after surface_new.
         // libghostty copies the strings during init, so the lifetime only needs
         // to span the call below.
