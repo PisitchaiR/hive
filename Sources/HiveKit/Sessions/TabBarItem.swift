@@ -103,21 +103,35 @@ struct TabBarItem: View {
         return .clear
     }
 
-    /// Shows only on non-zero exit. Successful runs intentionally leave the
-    /// row clean — a green dot on every command would dominate the chrome.
+    /// Three-state activity dot mirroring `SidebarWorkspaceRow.activityDotColor`:
+    /// attention (yellow) > command failure (red) > running (blue) > none.
+    /// Successful idle runs leave the row clean.
     @ViewBuilder
     private var commandStatusDot: some View {
-        if let exit = tab.lastCommandExit, exit != 0 {
+        let hasFailure = (tab.lastCommandExit ?? 0) != 0
+        if let color = Self.dotColor(state: tab.activityState, hasFailure: hasFailure) {
             Circle()
-                .fill(Theme.activityFailure)
+                .fill(color)
                 .frame(width: 5, height: 5)
-                .help(Self.statusTooltip(exit: exit, duration: tab.lastCommandDuration))
+                .help(Self.statusTooltip(state: tab.activityState, exit: tab.lastCommandExit, duration: tab.lastCommandDuration))
         }
     }
 
-    private static func statusTooltip(exit: Int, duration: TimeInterval?) -> String {
-        guard let duration else { return "exit \(exit)" }
-        return "exit \(exit) · \(formatDuration(duration))"
+    private static func dotColor(state: SessionActivityState, hasFailure: Bool) -> Color? {
+        if state == .attention { return Theme.activityAttention }
+        if hasFailure { return Theme.activityFailure }
+        if state == .running { return Theme.activityRunning }
+        return nil
+    }
+
+    private static func statusTooltip(state: SessionActivityState, exit: Int?, duration: TimeInterval?) -> String {
+        if state == .attention { return "waiting for input" }
+        if let exit, exit != 0 {
+            if let duration { return "exit \(exit) · \(formatDuration(duration))" }
+            return "exit \(exit)"
+        }
+        if state == .running { return "running" }
+        return ""
     }
 
     private static func formatDuration(_ seconds: TimeInterval) -> String {

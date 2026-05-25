@@ -21,12 +21,35 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
+# --release: use the clean version string (no git SHA suffix). Passed by
+# release.sh so published builds stay semver-clean.
+RELEASE_BUILD=false
+INSTALL_AFTER=false
+for arg in "$@"; do
+    case "$arg" in
+        --release) RELEASE_BUILD=true ;;
+        --install) INSTALL_AFTER=true ;;
+    esac
+done
+
 # Pull displayVersion from AppInfo.swift so About + Info.plist stay in sync.
 VERSION="$(grep -E 'static let displayVersion' Sources/HiveKit/App/AppInfo.swift \
     | sed -E 's/.*= "([^"]+)".*/\1/')"
 if [ -z "$VERSION" ]; then
     echo "build-app.sh: failed to extract displayVersion from AppInfo.swift" >&2
     exit 1
+fi
+
+# Local dev builds append +<sha> to CFBundleShortVersionString so you can
+# tell which commit is installed without opening About. Release builds stay
+# clean (semver only) so the GitHub-release tag matches the plist exactly.
+if $RELEASE_BUILD; then
+    BUILD_VERSION="$VERSION"
+else
+    GIT_SHA="$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")"
+    # Mark dirty working tree so a stale install is obvious.
+    git diff --quiet 2>/dev/null || GIT_SHA="${GIT_SHA}-dirty"
+    BUILD_VERSION="${VERSION}+${GIT_SHA}"
 fi
 
 BUNDLE_ID="com.pisitchair.hive"
@@ -45,7 +68,7 @@ done
     exit 1
 }
 
-echo "==> Assembling ${APP} (v${VERSION})"
+echo "==> Assembling ${APP} (v${BUILD_VERSION})"
 rm -rf "$APP"
 mkdir -p "${APP}/Contents/MacOS"
 mkdir -p "${APP}/Contents/Resources"
@@ -119,9 +142,9 @@ cat > "${RES_BUNDLE}/Contents/Info.plist" <<PLIST
     <key>CFBundlePackageType</key>
     <string>BNDL</string>
     <key>CFBundleShortVersionString</key>
-    <string>${VERSION}</string>
+    <string>${BUILD_VERSION}</string>
     <key>CFBundleVersion</key>
-    <string>${VERSION}</string>
+    <string>${BUILD_VERSION}</string>
 </dict>
 </plist>
 PLIST
@@ -151,9 +174,9 @@ cat > "${APP}/Contents/Info.plist" <<PLIST
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>${VERSION}</string>
+    <string>${BUILD_VERSION}</string>
     <key>CFBundleVersion</key>
-    <string>${VERSION}</string>
+    <string>${BUILD_VERSION}</string>
     <key>CFBundleSignature</key>
     <string>????</string>
     <key>LSApplicationCategoryType</key>
@@ -185,15 +208,18 @@ codesign --force --sign - "${APP}/Contents/MacOS/HiveHook"
 codesign --force --sign - "${APP}" 2>&1 | tail -3
 
 echo ""
-echo "✓ Built ${APP} (v${VERSION})"
+echo "✓ Built ${APP} (v${BUILD_VERSION})"
 echo "  open ${APP}                                           # launch"
 echo "  rm -rf /Applications/${APP_NAME}.app && cp -R ${APP} /Applications/  # install"
 
-# --install flag: replace /Applications/Hive.app in one shot
-if [[ "${1:-}" == "--install" ]]; then
+# --install flag: quit any running instance, replace /Applications/Hive.app
+if $INSTALL_AFTER; then
     echo ""
     echo "==> Installing to /Applications/${APP_NAME}.app"
+    osascript -e 'quit app "Hive"' 2>/dev/null || true
+    sleep 0.5
     rm -rf "/Applications/${APP_NAME}.app"
     cp -R "$APP" /Applications/
-    echo "✓ Installed /Applications/${APP_NAME}.app"
+    echo "✓ Installed /Applications/${APP_NAME}.app (v${BUILD_VERSION})"
+    open "/Applications/${APP_NAME}.app"
 fi

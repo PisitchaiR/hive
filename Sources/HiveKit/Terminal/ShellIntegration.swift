@@ -537,6 +537,25 @@ enum HiveShellIntegration {
         return .other
     }
 
+    /// Launcher script for zsh sessions. Sets `ZDOTDIR` to the wrapper
+    /// directory and execs `/bin/zsh --login`. Passing ZDOTDIR through
+    /// ghostty's `env_vars` is unreliable — if the parent process already
+    /// has `ZDOTDIR` set, ghostty adds but doesn't override it, so zsh
+    /// reads the wrong rc dir. The launcher sets it explicitly before exec,
+    /// which guarantees the wrapper `.zshrc` (and therefore `agentLaunchBlock`
+    /// and OSC 7 / OSC 133 hooks) always load.
+    static let zshLauncherPath: String = {
+        let dir = NSTemporaryDirectory()
+        let launcherPath = dir.appending("hive-zsh-launch-\(getpid()).sh")
+        let launcher = """
+        #!/bin/sh
+        export ZDOTDIR="\(zshDirectory)"
+        exec "\(zshPath)" --login
+        """
+        writeFile(at: launcherPath, contents: launcher, executable: true)
+        return launcherPath
+    }()
+
     /// Path to a tiny launcher script that re-execs bash as an interactive,
     /// non-login shell with our `--rcfile`. Required because libghostty starts
     /// every `command` as a login shell (`argv[0]` prefixed with `-`), and
@@ -698,6 +717,7 @@ enum HiveShellIntegration {
         let pid = getpid()
         for path in [
             dir.appending("hive-bash-launch-\(pid).sh"),
+            dir.appending("hive-zsh-launch-\(pid).sh"),
             dir.appending("hive-bashrc-\(pid)"),
             dir.appending("hive-zsh-\(pid)"),
         ] {

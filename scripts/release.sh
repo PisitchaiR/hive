@@ -112,7 +112,7 @@ run swift test
 
 # 4. Build .app
 echo "==> Building app"
-run bash scripts/build-app.sh
+run bash scripts/build-app.sh --release
 
 # 5. Zip
 ZIP="dist/Hive-${TAG}.zip"

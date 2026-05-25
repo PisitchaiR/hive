@@ -192,6 +192,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
             selfRow("New Workspace", #selector(handleNewWorkspace), "n"),
             selfRow("New Window", #selector(handleNewWindow), "n", modifiers: [.command, .shift]),
             .separator,
+            .separator,
+            selfRow("Quick Open…", #selector(handleQuickOpen), "p"),
+            .separator,
             selfRow("Close Tab", #selector(handleCloseTab), "w"),
             selfRow("Restart App", #selector(handleRestartApp), "r"),
             selfRow("Reopen Closed Tab", #selector(handleReopenClosedTab), "t", modifiers: [.command, .shift]),
@@ -358,6 +361,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
 
     @objc private func handleNewWorkspace() {
         activeStore?.addWorkspace()
+    }
+
+    @objc private func handleQuickOpen() {
+        guard let store = activeStore else { return }
+        store.isQuickOpenVisible = true
     }
 
     @objc private func handleCloseTab() {
