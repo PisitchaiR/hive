@@ -15,6 +15,7 @@ final class NoOpEngine: TerminalEngine {
     var onSearchTotal: ((Int) -> Void)? = nil
     var onSearchSelected: ((Int) -> Void)? = nil
     var foregroundPid: pid_t? = nil
+    var liveWorkingDirectory: URL? { nil }
     var onProcessExitedCleanly: (() -> Void)? = nil
 
     init() {
