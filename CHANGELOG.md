@@ -2,6 +2,11 @@
 
 Notable changes per release. Tagged commits use `vX.Y.Z` shortform.
 
+## Unreleased
+
+- Fixed: Option+Left / Option+Right now reliably jump word-by-word in zsh and bash. The wrapper used to set the `^[[1;3D` / `^[[1;3C` keybindings before sourcing user rc, so frameworks like oh-my-zsh / powerlevel10k that call `bindkey -e` during init silently wiped them and the unbound sequence self-inserted as `;3C` / `;3D` at the prompt. Bindings are now re-applied after user rc.
+- Option+Fn+Delete now kills the word forward, symmetric to Option+Backspace which already killed the word backward.
+
 ## v0.15.1 — 2026-05-26
 
 - Fixed: agent auto-launch on systems with PTY-shim shells (Amazon Q / Kiro CLI / Fig) — previously the user's `.zshrc` `exec`'d into the shim mid-source, so the wrapper never reached `agentLaunchBlock` and the agent didn't start. Hive now launches the agent before sourcing user rc.

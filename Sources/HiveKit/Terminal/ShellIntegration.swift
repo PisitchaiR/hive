@@ -575,14 +575,6 @@ enum HiveShellIntegration {
         let rcfilePath = dir.appending("hive-bashrc-\(getpid())")
 
         let bashrc = """
-        # Default word-jump bindings; readline doesn't bind Ctrl/Alt+arrow on
-        # macOS by default. See the matching block in zshDirectory.
-        bind '"\\e[1;5D": backward-word'     # Ctrl+Left
-        bind '"\\e[1;5C": forward-word'      # Ctrl+Right
-        bind '"\\e[1;3D": backward-word'     # Alt+Left
-        bind '"\\e[1;3C": forward-word'      # Alt+Right
-        bind 'set completion-ignore-case on'
-
         # Launch HIVE_AGENT *before* sourcing user rc — symmetric with the zsh
         # wrapper. PTY-shim shells (Amazon Q / Fig) can `exec` mid-rc and
         # never return, leaving anything below unreachable.
@@ -632,6 +624,21 @@ enum HiveShellIntegration {
         fi
         unset _hive_login_rc_loaded
 
+        # Default word-jump bindings; readline doesn't bind Ctrl/Alt+arrow on
+        # macOS by default. Placed *after* sourcing user rc because many
+        # bash setups (inputrc with `set keymap`, `bind -m`, framework
+        # init) can reset bindings and silently wipe ours — when that
+        # happens the unbound `\\e[1;3C` sequence ends up self-inserting
+        # `;3C` into the prompt. See the matching block in zshDirectory.
+        bind '"\\e[1;5D": backward-word'     # Ctrl+Left
+        bind '"\\e[1;5C": forward-word'      # Ctrl+Right
+        bind '"\\e[1;3D": backward-word'     # Alt+Left
+        bind '"\\e[1;3C": forward-word'      # Alt+Right
+        # Symmetric to Option+Backspace → ^W (backward-kill-word) handled
+        # in LibghosttyEngine.keyDown — see the matching block in zshDirectory.
+        bind '"\\e[3;3~": kill-word'         # Option+Fn+Delete
+        bind 'set completion-ignore-case on'
+
         # User rc may rewrite PATH; re-prepend the hive wrapper directory so
         # `claude` etc. resolve to our shims first.
         [[ -n "$HIVE_BIN_DIR" ]] && export PATH="$HIVE_BIN_DIR:$PATH"
@@ -667,16 +674,6 @@ enum HiveShellIntegration {
             at: URL(fileURLWithPath: dir), withIntermediateDirectories: true
         )
         let zshrc = """
-        # Default word-jump bindings. zsh ZLE only binds Alt+B/F by default;
-        # most other terminals (iTerm2, ghostty, Apple Terminal) remap the
-        # Ctrl/Alt+arrow sequences to ESC+B/F so users don't notice. hive
-        # binds them directly here. Placed before sourcing ~/.zshrc so user
-        # rc files retain final say if they override the same sequences.
-        bindkey '^[[1;5D' backward-word    # Ctrl+Left
-        bindkey '^[[1;5C' forward-word     # Ctrl+Right
-        bindkey '^[[1;3D' backward-word    # Alt+Left
-        bindkey '^[[1;3C' forward-word     # Alt+Right
-
         # Restore ZDOTDIR to the user's original (almost always unset) *before*
         # replaying their rc chain. zsh has already consumed ZDOTDIR to locate
         # this wrapper rc — changing it now is safe and ensures any
@@ -743,6 +740,26 @@ enum HiveShellIntegration {
         [[ -r "${ZDOTDIR:-$HOME}/.zshenv" ]] && source "${ZDOTDIR:-$HOME}/.zshenv"
         [[ -r "${ZDOTDIR:-$HOME}/.zprofile" ]] && source "${ZDOTDIR:-$HOME}/.zprofile"
         [[ -r "${ZDOTDIR:-$HOME}/.zshrc" ]] && source "${ZDOTDIR:-$HOME}/.zshrc"
+
+        # Default word-jump bindings. zsh ZLE only binds Alt+B/F by default;
+        # most other terminals (iTerm2, ghostty, Apple Terminal) remap the
+        # Ctrl/Alt+arrow sequences to ESC+B/F so users don't notice. hive
+        # binds them directly here. Placed *after* sourcing user rc because
+        # frameworks like oh-my-zsh / powerlevel10k frequently call
+        # `bindkey -e` (or -v) during init, which resets the keymap and
+        # wipes any prior `bindkey` calls — when that happens the unbound
+        # `^[[1;3C` sequence ends up self-inserting `;3C` into the prompt.
+        # Users who actually want different word-jump bindings can re-bind
+        # these in a precmd or a sourced post-rc file.
+        bindkey '^[[1;5D' backward-word    # Ctrl+Left
+        bindkey '^[[1;5C' forward-word     # Ctrl+Right
+        bindkey '^[[1;3D' backward-word    # Alt+Left
+        bindkey '^[[1;3C' forward-word     # Alt+Right
+        # Option+Fn+Delete → kill-word forward. Symmetric to the
+        # Option+Backspace → ^W (backward-kill-word) intercept in
+        # LibghosttyEngine.keyDown; without this the engine-emitted
+        # `^[[3;3~` is unbound and self-inserts `;3~` at the prompt.
+        bindkey '^[[3;3~' kill-word        # Option+Fn+Delete
 
         # Case-insensitive tab completion (applied after user rc so it always wins)
         zstyle ':completion:*' matcher-list 'm:{[:lower:][:upper:]}={[:upper:][:lower:]}'
