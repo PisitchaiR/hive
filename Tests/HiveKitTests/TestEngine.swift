@@ -17,6 +17,7 @@ final class TestEngine: TerminalEngine {
     var onSearchTotal: ((Int) -> Void)?
     var onSearchSelected: ((Int) -> Void)?
     var foregroundPid: pid_t? { nil }
+    var liveWorkingDirectory: URL?
 
     private(set) var startedConfigs: [TerminalSessionConfig] = []
     private(set) var terminateCount = 0

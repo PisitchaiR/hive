@@ -393,6 +393,45 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual((newSession?.engine as? TestEngine)?.startedConfigs.last?.workingDirectory, "/tmp/projectA/sub")
     }
 
+    /// Regression for #5: the active tab `cd`'d but never emitted OSC 7
+    /// (fish/nu, themes that update the prompt from `$PWD` only, user rc that
+    /// wipes `chpwd_functions`). `splitPane` must consult the engine's live
+    /// kernel-level cwd, not the stale `Session.currentDirectory` cache.
+    func testSplitPanePrefersLiveCwdOverStaleCache() {
+        let store = makeStore()
+        let ws = store.addWorkspace(workingDirectory: projectA)
+        let pane = firstPane(ws)
+        let source = pane.tabs[0]
+        // session.currentDirectory stays at projectA (no emitPwd) — i.e. OSC 7
+        // never fired — while the engine's kernel-level cwd already moved.
+        engine(source).liveWorkingDirectory = URL(fileURLWithPath: "/tmp/projectA/deep")
+        let new = store.splitPane(pane, orientation: .horizontal, in: ws)
+        let newSession = new?.tabs.first
+        XCTAssertEqual(
+            (newSession?.engine as? TestEngine)?.startedConfigs.last?.workingDirectory,
+            "/tmp/projectA/deep"
+        )
+        // Cache wasn't healed by the split — that's a separate symptom worth
+        // its own change. Pin the current behaviour so a future heal lands
+        // intentionally rather than as a drive-by.
+        XCTAssertEqual(source.currentDirectory.path, projectA.path)
+    }
+
+    /// Regression for #5: duplicateTab mirrors splitPane's policy — the new
+    /// tab spawns at the source's live kernel-level cwd, not the cached one.
+    func testDuplicateTabPrefersLiveCwdOverStaleCache() {
+        let store = makeStore()
+        let ws = store.addWorkspace(workingDirectory: projectA)
+        let pane = firstPane(ws)
+        let source = pane.tabs[0]
+        engine(source).liveWorkingDirectory = URL(fileURLWithPath: "/tmp/projectA/deep")
+        let copy = store.duplicateTab(source, in: ws)
+        XCTAssertEqual(
+            (copy?.engine as? TestEngine)?.startedConfigs.last?.workingDirectory,
+            "/tmp/projectA/deep"
+        )
+    }
+
     func testClosePaneCollapsesSiblingUp() {
         let store = makeStore()
         let ws = store.workspaces[0]

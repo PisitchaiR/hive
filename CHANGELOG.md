@@ -2,6 +2,11 @@
 
 Notable changes per release. Tagged commits use `vX.Y.Z` shortform.
 
+## Unreleased
+
+- Fixed: splitting a pane now opens the new pane in the tab's actual current directory, not a stale cached one. Previously, `cd`'ing in a tab whose shell didn't emit `OSC 7` (fish/nu, themes that re-derive the prompt from `$PWD` via `precmd`, user rc that wipes `chpwd_functions`) left Hive's per-tab cwd cache pointing at the original workspace dir — and the new pane landed there instead of where the user actually was. Split (and Duplicate Tab) now ask the kernel for the foreground process's cwd via libproc and prefer that over the cache.
+
+
 ## v0.15.1 — 2026-05-26
 
 - Fixed: agent auto-launch on systems with PTY-shim shells (Amazon Q / Kiro CLI / Fig) — previously the user's `.zshrc` `exec`'d into the shim mid-source, so the wrapper never reached `agentLaunchBlock` and the agent didn't start. Hive now launches the agent before sourcing user rc.

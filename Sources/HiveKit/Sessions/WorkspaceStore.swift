@@ -296,7 +296,9 @@ final class WorkspaceStore {
     @discardableResult
     func duplicateTab(_ session: Session, in workspace: Workspace) -> Session? {
         guard let pane = pane(containing: session, in: workspace) else { return nil }
-        return addTab(in: workspace, pane: pane, template: session.agent, initialCwd: session.currentDirectory)
+        // Match splitPane: kernel-level cwd beats the OSC 7 cache. Issue #5.
+        let cwd = session.engine.liveWorkingDirectory ?? session.currentDirectory
+        return addTab(in: workspace, pane: pane, template: session.agent, initialCwd: cwd)
     }
 
     /// Set or clear a user-provided tab title. Empty / whitespace input clears
@@ -537,8 +539,16 @@ final class WorkspaceStore {
     func splitPane(_ pane: Pane, orientation: SplitOrientation, in workspace: Workspace) -> Pane? {
         guard let leafNode = workspace.root.paneNode(paneId: pane.id) else { return nil }
         guard case .pane(let existing) = leafNode.content else { return nil }
-        let template = existing.activeTab?.agent ?? .terminal
-        let cwd = existing.activeTab?.currentDirectory ?? workspace.workingDirectory
+        let source = existing.activeTab
+        let template = source?.agent ?? .terminal
+        // Prefer the kernel's view of the foreground process's cwd over
+        // `Session.currentDirectory` — the cached value is fed by OSC 7, which
+        // doesn't fire under fish / nu, themes that re-derive the prompt from
+        // `$PWD` without calling `chpwd_functions`, or user rc that overrides
+        // the hook. Issue #5.
+        let cwd = source?.engine.liveWorkingDirectory
+            ?? source?.currentDirectory
+            ?? workspace.workingDirectory
         let newSession = spawnSession(template: template, initialCwd: cwd)
         wireSessionCallbacks(engine: newSession.engine, session: newSession, workspace: workspace)
         let newPane = Pane(tabs: [newSession], activeTabId: newSession.id)
