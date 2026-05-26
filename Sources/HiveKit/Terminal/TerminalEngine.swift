@@ -60,6 +60,13 @@ protocol TerminalEngine: AnyObject {
     /// initial/fallback env snapshot before the prompt hook reports live
     /// `VIRTUAL_ENV` / `NVM_BIN`.
     var foregroundPid: pid_t? { get }
+    /// Best-effort live cwd of the foreground process, queried straight from
+    /// the kernel (libproc on macOS). Bypasses the OSC 7 cache so split /
+    /// duplicate inherit the right dir even when the user's shell never
+    /// emitted an OSC 7 (fish/nu, themes that update `$PWD` via `precmd` only,
+    /// user rc that clobbers `chpwd_functions`). nil when no PTY is attached
+    /// or the lookup fails — callers fall back to `Session.currentDirectory`.
+    var liveWorkingDirectory: URL? { get }
     /// Fires when the surface's child process exits cleanly (exit code 0
     /// — `exit` / `logout` typed in the shell). Non-zero exits intentionally
     /// don't fire this — libghostty's "press any key to close" message
