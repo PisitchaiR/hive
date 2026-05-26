@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import GhosttyKit
 
 
@@ -255,6 +256,25 @@ final class LibghosttyEngine: TerminalEngine {
         guard let surface = surfaceView.surface else { return nil }
         let pid = pid_t(ghostty_surface_foreground_pid(surface))
         return pid > 0 ? pid : nil
+    }
+
+    /// Live cwd straight from the kernel — used by split / duplicate so a new
+    /// pane inherits where the user actually is, not the (possibly stale)
+    /// OSC 7 cache. The cache misses when the user's shell never emits OSC 7
+    /// (fish/nu, user rc that wipes `chpwd_functions`, theme that derives the
+    /// prompt from `$PWD` only).
+    var liveWorkingDirectory: URL? {
+        guard let pid = foregroundPid else { return nil }
+        var info = proc_vnodepathinfo()
+        let size = MemoryLayout<proc_vnodepathinfo>.stride
+        let n = proc_pidinfo(pid, PROC_PIDVNODEPATHINFO, 0, &info, Int32(size))
+        guard n == Int32(size) else { return nil }
+        let path = withUnsafeBytes(of: &info.pvi_cdir.vip_path) { raw -> String? in
+            guard let base = raw.bindMemory(to: CChar.self).baseAddress else { return nil }
+            return String(validatingCString: base)
+        }
+        guard let path, !path.isEmpty else { return nil }
+        return URL(fileURLWithPath: path)
     }
 
     init() {

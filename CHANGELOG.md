@@ -4,6 +4,7 @@ Notable changes per release. Tagged commits use `vX.Y.Z` shortform.
 
 ## Unreleased
 
+- Fixed: splitting a pane now opens the new pane in the tab's actual current directory, not a stale cached one. Previously, `cd`'ing in a tab whose shell didn't emit `OSC 7` (fish/nu, themes that re-derive the prompt from `$PWD` via `precmd`, user rc that wipes `chpwd_functions`) left Hive's per-tab cwd cache pointing at the original workspace dir — and the new pane landed there instead of where the user actually was. Split (and Duplicate Tab) now ask the kernel for the foreground process's cwd via libproc and prefer that over the cache.
 - Fixed: Option+Left / Option+Right now reliably jump word-by-word in zsh and bash. The wrapper used to set the `^[[1;3D` / `^[[1;3C` keybindings before sourcing user rc, so frameworks like oh-my-zsh / powerlevel10k that call `bindkey -e` during init silently wiped them and the unbound sequence self-inserted as `;3C` / `;3D` at the prompt. Bindings are now re-applied after user rc.
 - Option+Fn+Delete now kills the word forward, symmetric to Option+Backspace which already killed the word backward.
 
