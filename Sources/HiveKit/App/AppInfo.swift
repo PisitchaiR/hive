@@ -5,7 +5,7 @@ import Foundation
 /// About panel matches the latest CHANGELOG `vX.Y` tag.
 enum HiveApp {
     static let name = "hive"
-    static let displayVersion = "0.15.1"
+    static let displayVersion = "0.15.2"
     /// Bundle version string from Info.plist — same as `displayVersion` for
     /// release builds, but dev builds via `scripts/build-app.sh` append
     /// `+<sha>` (or `+<sha>-dirty`) so the About panel reveals which
